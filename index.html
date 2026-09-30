@@ -104,8 +104,8 @@ input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid v
 <script>
 // ================== CONFIG ==================
 // Dejá las dos vacías para modo demo. Con Supabase cargado, la app funciona en vivo para todo el grupo.
-const SUPABASE_URL = '';
-const SUPABASE_ANON_KEY = '';
+const SUPABASE_URL = 'https://pmoensqpvfbtnhjzwwfa.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable__E3zh1wNRzdd3RoR9R4UMQ_Y1O_oSIU';
 const PUSH_WORKER_URL = ''; // Cloudflare Worker de notificaciones (opcional)
 const VAPID_PUBLIC_KEY = '';
 // ============================================
@@ -173,8 +173,8 @@ const demoStore={
 let sb=null;
 const supaStore={
   async session(){const {data}=await sb.auth.getSession();return data.session?.user?.id||null},
-  async sendCode(email){const {error}=await sb.auth.signInWithOtp({email});if(error)throw error},
-  async verify(email,token){const {data,error}=await sb.auth.verifyOtp({email,token,type:'email'});if(error)throw error;uid=data.user.id},
+  async login(email,password){const {data,error}=await sb.auth.signInWithPassword({email,password});if(error)throw error;uid=data.user.id},
+  async signup(email,password){const {data,error}=await sb.auth.signUp({email,password});if(error)throw error;if(!data.session)throw new Error('sin sesión');uid=data.user.id},
   async logout(){await sb.auth.signOut()},
   async savePerfil(p){const {error}=await sb.from('perfiles').upsert(p);if(error)throw error;await this.load()},
   async addOferta(o){const {data,error}=await sb.from('ofertas').insert(o).select('id').single();if(error)throw error;this.notify('oferta',data.id);return data.id},
@@ -332,11 +332,13 @@ function showLogin(){
     $('#login').querySelectorAll('.pill').forEach(b=>b.onclick=async()=>{await demoStore.loginDemo(b.dataset.u);enter()});
     $('#l_ok').onclick=async()=>{const n=$('#l_nom').value.trim();if(!n)return toast('Poné tu nombre');const id='u-'+uuid();await demoStore.savePerfil({id,nombre:n,negocio:$('#l_neg').value.trim()});await demoStore.loginDemo(id);enter()};
   }else{
-    $('#login').innerHTML=`<h2>Compras en grupo</h2><p>Ingresá tu mail y te mandamos un código de 6 dígitos.</p>
-      <input id="l_mail" type="email" inputmode="email" placeholder="tu@mail.com"><button class="btn p" id="l_send">Enviar código</button>
-      <div id="l_step2" hidden><label>Código</label><input id="l_code" inputmode="numeric" maxlength="6" placeholder="123456"><button class="btn p" id="l_ver">Entrar</button></div>`;
-    $('#l_send').onclick=async()=>{const m=$('#l_mail').value.trim();if(!m)return toast('Poné tu mail');$('#l_send').disabled=true;try{await api.sendCode(m);$('#l_step2').hidden=false;toast('Código enviado')}catch(e){$('#l_send').disabled=false;toast('No se pudo enviar: '+e.message)}};
-    $('#l_ver').onclick=async()=>{try{await api.verify($('#l_mail').value.trim(),$('#l_code').value.trim());enter()}catch(e){toast('Código incorrecto')}};
+    $('#login').innerHTML=`<h2>Compras en grupo</h2><p>Entrá con tu mail y una contraseña. Si es tu primera vez, tocá "Crear cuenta".</p>
+      <label>Mail</label><input id="l_mail" type="email" inputmode="email" autocomplete="username" placeholder="tu@mail.com">
+      <label>Contraseña</label><input id="l_pass" type="password" autocomplete="current-password" placeholder="mínimo 6 caracteres">
+      <button class="btn p" id="l_in">Entrar</button><button class="btn s" id="l_up">Crear cuenta</button>`;
+    const creds=()=>{const m=$('#l_mail').value.trim().toLowerCase(),p=$('#l_pass').value;if(!m||!p){toast('Completá mail y contraseña');return null}if(p.length<6){toast('La contraseña tiene que tener 6 caracteres o más');return null}return [m,p]};
+    $('#l_in').onclick=async()=>{const c=creds();if(!c)return;try{await api.login(...c);enter()}catch(e){toast(/invalid/i.test(e.message)?'Mail o contraseña incorrectos':'No se pudo entrar: '+e.message)}};
+    $('#l_up').onclick=async()=>{const c=creds();if(!c)return;try{await api.signup(...c);enter()}catch(e){toast(/already|registered/i.test(e.message)?'Ese mail ya tiene cuenta, tocá Entrar':'No se pudo crear: '+e.message)}};
   }
 }
 async function enter(){
@@ -357,6 +359,7 @@ const _render=render;render=async function(){await _render();if(sheetOf&&!docume
   $('#demoBar').hidden=!DEMO;
   if(!DEMO){sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY)}else demoStore.seed();
   uid=await api.session();
+  if(!uid&&!DEMO&&location.hash.includes('access_token')){await new Promise(r=>setTimeout(r,1500));uid=await api.session();history.replaceState(null,'',location.pathname)}
   if(uid)enter();else showLogin();
 })();
 </script>
