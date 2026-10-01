@@ -70,6 +70,8 @@ input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid v
 .tot b{font-family:"Barlow Condensed";font-size:30px} .tot span{color:var(--ink2);font-size:14px}
 .nt{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);align-items:flex-start;cursor:pointer} .nt .dot{width:10px;height:10px;border-radius:50%;background:var(--tag);margin-top:7px;flex:none}
 .nt .dot.off{background:var(--line)} .nt small{color:var(--ink2);display:block;font-size:13px}
+.pay{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:99px;background:var(--chip);color:var(--ink2)} .pay.ok{background:#d8f1e4;color:#146b45}
+.pctl{width:100%;display:flex;gap:8px;align-items:center;padding-top:6px} .pctl input{flex:1;padding:8px 10px;font-size:14px} .pbtn{border:0;border-radius:10px;padding:9px 12px;font-weight:600;font-size:14px;background:var(--chip);color:var(--ink);cursor:pointer} .pbtn.p{background:var(--green);color:#fff}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(80px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:99px;font-size:14px;z-index:20;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.on{opacity:1} .note{font-size:13px;color:var(--ink2);margin-top:8px} .desc{white-space:pre-wrap;margin-top:10px;font-size:15px}
 </style>
@@ -124,12 +126,13 @@ const uuid=()=>crypto.randomUUID?crypto.randomUUID():Math.random().toString(36).
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),2200)}
 
 // ================== ESTADO ==================
-let ofertas=[],pedidos=[],perfiles={},uid=null,view='ofertas',histFilter='todas',sheetOf=null;
+let ofertas=[],pedidos=[],pagos=[],perfiles={},uid=null,view='ofertas',histFilter='todas',sheetOf=null;
 let lastSeen=Number(LS('cg_lastSeen')||0);
 const estado=o=>o.estado==='cerrada'?'cerrada':(o.cierra&&o.cierra<today()?'vencida':'abierta');
 const diasCierre=o=>o.cierra?Math.ceil((new Date(o.cierra+'T23:59')-Date.now())/86400000):null;
 const pedidosDe=id=>pedidos.filter(p=>p.oferta_id===id);
 const miPedido=id=>pedidos.find(p=>p.oferta_id===id&&p.uid===uid);
+const pagoDe=(oid,u)=>pagos.find(x=>x.oferta_id===oid&&x.uid===u);
 const totalDe=id=>pedidosDe(id).reduce((a,p)=>a+Number(p.cantidad||0),0);
 const nom=id=>id===uid?'Vos':(perfiles[id]?.nombre||'Alguien');
 const neg=id=>perfiles[id]?.negocio||'';
@@ -147,6 +150,7 @@ const demoStore={
         {id:'o2',proveedor:'Coca-Cola Andina',producto:'Coca 2.25L x8 retornable',precio:14200,unidad:'bulto',cierra:addDays(1),entrega:addDays(3),minimo:null,notas:'Precio por volumen, entra si juntamos 100 bultos entre todos.',autor_id:u2,estado:'abierta',creada_en:new Date(Date.now()-3600e3*20).toISOString()},
         {id:'o3',proveedor:'Molinos',producto:'Fideos Matarazzo 500g x20',precio:21500,unidad:'bulto',cierra:addDays(5),entrega:null,minimo:'20 bultos',notas:null,autor_id:u3,estado:'abierta',creada_en:new Date(Date.now()-3600e3*2).toISOString()},
         {id:'o4',proveedor:'Papelera del Plata',producto:'Papel higiénico Elite x40',precio:16800,unidad:'pack',cierra:addDays(-3),entrega:null,minimo:null,notas:'Entregado.',autor_id:u1,estado:'cerrada',creada_en:new Date(Date.now()-86400e3*9).toISOString(),cerrada_en:new Date(Date.now()-86400e3*3).toISOString()}],
+      pagos:[{oferta_id:'o4',uid:'u-jorge',pagado:true,fecha_pago:addDays(-6)}],
       pedidos:[
         {oferta_id:'o1',uid:u2,cantidad:10,fecha:addDays(7),nota:'retiro yo',actualizado:new Date(Date.now()-3600e3*3).toISOString()},
         {oferta_id:'o1',uid:u3,cantidad:6,fecha:null,nota:null,actualizado:new Date(Date.now()-3600e3).toISOString()},
@@ -157,7 +161,7 @@ const demoStore={
     });
   },
   get(){return LS('cg_demo')}, put(d){LSs('cg_demo',d);this.load()},
-  load(){const d=this.get();ofertas=d.ofertas;pedidos=d.pedidos;perfiles=d.perfiles;render()},
+  load(){const d=this.get();ofertas=d.ofertas;pedidos=d.pedidos;pagos=d.pagos||[];perfiles=d.perfiles;render()},
   async session(){return LS('cg_demo_uid')},
   async loginDemo(id){LSs('cg_demo_uid',id);uid=id},
   async logout(){localStorage.removeItem('cg_demo_uid')},
@@ -167,6 +171,7 @@ const demoStore={
   async delOferta(id){const d=this.get();d.ofertas=d.ofertas.filter(o=>o.id!==id);d.pedidos=d.pedidos.filter(p=>p.oferta_id!==id);this.put(d)},
   async setPedido(p){const d=this.get();d.pedidos=d.pedidos.filter(x=>!(x.oferta_id===p.oferta_id&&x.uid===p.uid));p.actualizado=new Date().toISOString();d.pedidos.push(p);this.put(d)},
   async delPedido(oid){const d=this.get();d.pedidos=d.pedidos.filter(x=>!(x.oferta_id===oid&&x.uid===uid));this.put(d)},
+  async setPago(p){const d=this.get();d.pagos=(d.pagos||[]).filter(x=>!(x.oferta_id===p.oferta_id&&x.uid===p.uid));d.pagos.push(p);this.put(d)},
   async start(){this.seed();this.load()}
 };
 
@@ -183,13 +188,14 @@ const supaStore={
   async delOferta(id){const {error}=await sb.from('ofertas').delete().eq('id',id);if(error)throw error},
   async setPedido(p){p.actualizado=new Date().toISOString();const {error}=await sb.from('pedidos').upsert(p);if(error)throw error;this.notify('pedido',p.oferta_id)},
   async delPedido(oid){const {error}=await sb.from('pedidos').delete().eq('oferta_id',oid).eq('uid',uid);if(error)throw error},
+  async setPago(p){p.actualizado=new Date().toISOString();const {error}=await sb.from('pagos').upsert(p);if(error)throw error},
   async load(){
-    const [o,p,f]=await Promise.all([sb.from('ofertas').select('*').order('creada_en',{ascending:false}),sb.from('pedidos').select('*'),sb.from('perfiles').select('*')]);
-    ofertas=o.data||[];pedidos=p.data||[];perfiles=Object.fromEntries((f.data||[]).map(x=>[x.id,x]));render();
+    const [o,p,f,g]=await Promise.all([sb.from('ofertas').select('*').order('creada_en',{ascending:false}),sb.from('pedidos').select('*'),sb.from('perfiles').select('*'),sb.from('pagos').select('*')]);
+    ofertas=o.data||[];pedidos=p.data||[];pagos=g.data||[];perfiles=Object.fromEntries((f.data||[]).map(x=>[x.id,x]));render();
   },
   async start(){
     await this.load();
-    sb.channel('cg').on('postgres_changes',{event:'*',schema:'public',table:'ofertas'},()=>this.load()).on('postgres_changes',{event:'*',schema:'public',table:'pedidos'},()=>this.load()).on('postgres_changes',{event:'*',schema:'public',table:'perfiles'},()=>this.load()).subscribe();
+    sb.channel('cg').on('postgres_changes',{event:'*',schema:'public',table:'ofertas'},()=>this.load()).on('postgres_changes',{event:'*',schema:'public',table:'pedidos'},()=>this.load()).on('postgres_changes',{event:'*',schema:'public',table:'perfiles'},()=>this.load()).on('postgres_changes',{event:'*',schema:'public',table:'pagos'},()=>this.load()).subscribe();
     this.push();
   },
   async notify(tipo,ofertaId){ if(!PUSH_WORKER_URL)return; try{const {data}=await sb.auth.getSession();fetch(PUSH_WORKER_URL+'/notify',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+data.session.access_token},body:JSON.stringify({tipo,ofertaId})})}catch(e){} },
@@ -224,7 +230,7 @@ function cardHTML(o){
     <div class="prod">${esc(o.producto)}</div>
     <div class="tag">${fmtP(o.precio)}<small>por ${esc(o.unidad||'unidad')}</small></div>
     <div class="meta"><span>${cierra}</span>${o.minimo?`<span>mínimo <b>${esc(o.minimo)}</b></span>`:''}${o.entrega?`<span>entrega <b>${fmtD(o.entrega)}</b></span>`:''}</div>
-    <div class="row"><span><b>${totalDe(o.id)}</b> ${esc(o.unidad||'unidades')} · ${ped.length} ${ped.length===1?'comprador':'compradores'}</span>
+    <div class="row"><span><b>${totalDe(o.id)}</b> ${esc(o.unidad||'unidades')} · ${ped.length} ${ped.length===1?'comprador':'compradores'}${ped.length?` · ${ped.filter(p=>pagoDe(o.id,p.uid)?.pagado).length}/${ped.length} pagaron`:''}</span>
       ${mp?`<span class="mine">Vos: ${esc(mp.cantidad)}</span>`:`<span class="avs">${avs}</span>`}</div></div>`;
 }
 function renderOfertas(){
@@ -245,6 +251,7 @@ function eventos(){
   ofertas.forEach(o=>{
     if(o.autor_id!==uid)ev.push({ts:T(o.creada_en),id:o.id,t:`Nueva oferta: ${o.producto}`,s:`${o.proveedor} · ${fmtP(o.precio)} · publicó ${nom(o.autor_id)}`});
     if(o.autor_id===uid)pedidosDe(o.id).filter(p=>p.uid!==uid).forEach(p=>ev.push({ts:T(p.actualizado),id:o.id,t:`${nom(p.uid)} se sumó a ${o.producto}`,s:`${p.cantidad} ${o.unidad||'unidades'}${p.fecha?' · para el '+fmtD(p.fecha):''}`}));
+    const mp=miPedido(o.id),pg=mp&&pagoDe(o.id,uid);if(pg?.pagado&&o.autor_id!==uid)ev.push({ts:T(pg.actualizado||pg.fecha_pago||o.creada_en),id:o.id,t:`Pago registrado en ${o.producto}`,s:`${nom(o.autor_id)} marcó tu pedido como pagado${pg.fecha_pago?' el '+fmtD(pg.fecha_pago):''}`});
     if(o.estado==='cerrada'&&miPedido(o.id)&&o.autor_id!==uid)ev.push({ts:T(o.cerrada_en||o.creada_en),id:o.id,t:`Se cerró ${o.producto}`,s:`Tu pedido: ${miPedido(o.id).cantidad} ${o.unidad||'unidades'}`});
     const d=diasCierre(o);if(estado(o)==='abierta'&&d!==null&&d<=1&&!miPedido(o.id))ev.push({ts:Date.now()-1,id:o.id,t:`${o.producto} cierra ${d<=0?'hoy':'mañana'}`,s:'Todavía no te sumaste',urg:1});
   });
@@ -303,7 +310,10 @@ function nuevaOferta(){
 function detalle(o){
   sheetOf=o.id;
   const st=estado(o),mp=miPedido(o.id),ped=pedidosDe(o.id),soy=o.autor_id===uid;
-  const lista=ped.length?ped.map(p=>`<div class="li"><img src="${avatar(p.uid)}" alt=""><div class="n">${esc(nom(p.uid))}${neg(p.uid)?' · '+esc(neg(p.uid)):''}<small>${p.fecha?'para el '+fmtD(p.fecha):''}${p.nota?(p.fecha?' · ':'')+esc(p.nota):''}</small></div><b>${esc(p.cantidad)}</b></div>`).join(''):'<div class="note">Nadie se sumó todavía.</div>';
+  const lista=ped.length?ped.map(p=>{const pg=pagoDe(o.id,p.uid),ok=!!pg?.pagado;const badge=ok?`<span class="pay ok">Pagó ${pg.fecha_pago?fmtD(pg.fecha_pago):''}</span>`:`<span class="pay">Pendiente</span>`;
+    const ctl=soy?(ok?`<button class="pbtn" data-pago="0" data-u="${p.uid}">Desmarcar</button>`:`<input type="date" class="pdate" data-u="${p.uid}" value="${today()}"><button class="pbtn p" data-pago="1" data-u="${p.uid}">Marcar pagado</button>`):'';
+    return `<div class="li" style="flex-wrap:wrap"><img src="${avatar(p.uid)}" alt=""><div class="n">${esc(nom(p.uid))}${neg(p.uid)?' · '+esc(neg(p.uid)):''}<small>${p.fecha?'para el '+fmtD(p.fecha):''}${p.nota?(p.fecha?' · ':'')+esc(p.nota):''}</small></div><div style="text-align:right"><b>${esc(p.cantidad)}</b><br>${badge}</div>${ctl?`<div class="pctl">${ctl}</div>`:''}</div>`}).join(''):'<div class="note">Nadie se sumó todavía.</div>';
+  const pagados=ped.filter(p=>pagoDe(o.id,p.uid)?.pagado).length;
   const form=st==='abierta'?`<h3 style="font-size:20px;margin-top:22px">${mp?'Tu pedido':'Sumarme'}</h3>
     <div class="g2"><div><label>Cantidad (${esc(o.unidad||'unidades')})</label><input id="p_cant" type="number" inputmode="numeric" value="${mp?esc(mp.cantidad):''}" placeholder="0"></div><div><label>Fecha que lo necesito</label><input id="p_fecha" type="date" value="${mp?.fecha||''}"></div></div>
     <label>Nota (opcional)</label><input id="p_nota" value="${mp?esc(mp.nota||''):''}" placeholder="Ej: retiro yo, pago transferencia">
@@ -311,13 +321,16 @@ function detalle(o){
     `<div class="note" style="margin-top:16px">Esta oferta está ${st}. ${mp?'Tu pedido fue de '+esc(mp.cantidad)+' '+esc(o.unidad||'unidades')+'.':'No participaste.'}</div>`;
   openSheet(`<h2>${esc(o.producto)}</h2><div class="prov">${esc(o.proveedor)} · publicó ${esc(nom(o.autor_id))} hace ${rel(o.creada_en)}</div>
     <div class="tot"><div><b>${fmtP(o.precio)}</b> <span>por ${esc(o.unidad||'unidad')}</span></div><div style="text-align:right"><b>${totalDe(o.id)}</b> <span>sumados</span></div></div>
-    <div class="meta"><span>cierra <b>${fmtD(o.cierra)}</b></span>${o.entrega?`<span>entrega <b>${fmtD(o.entrega)}</b></span>`:''}${o.minimo?`<span>mínimo <b>${esc(o.minimo)}</b></span>`:''}<span>estado <b>${st}</b></span></div>
+    <div class="meta"><span>cierra <b>${fmtD(o.cierra)}</b></span>${o.entrega?`<span>entrega <b>${fmtD(o.entrega)}</b></span>`:''}${o.minimo?`<span>mínimo <b>${esc(o.minimo)}</b></span>`:''}<span>estado <b>${st}</b></span>${ped.length?`<span>pagaron <b>${pagados}/${ped.length}</b></span>`:''}</div>
+    ${soy&&ped.length?'<div class="note">Como publicaste esta oferta, podés marcar quién pagó y cuándo. Los demás solo lo ven.</div>':''}
     ${o.notas?`<div class="desc">${esc(o.notas)}</div>`:''}
     <div class="list">${lista}</div>${form}
     <button class="btn wa" id="p_wa">Compartir en WhatsApp</button>
     ${soy&&st==='abierta'?'<button class="btn s" id="p_cerrar">Cerrar oferta</button>':''}
     ${soy&&st!=='abierta'?'<button class="btn d" id="p_borrar">Eliminar del historial</button>':''}`);
   $('#p_wa').onclick=()=>{const link=location.href.split('#')[0]+'#'+o.id;const txt=`🛒 *${o.producto}*\n${o.proveedor} · ${fmtP(o.precio)} por ${o.unidad||'unidad'}\nCierra el ${fmtD(o.cierra)}${o.minimo?' · mínimo '+o.minimo:''}${o.notas?'\n'+o.notas:''}\n\nSumate acá con tu cantidad: ${link}`;window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank')};
+  $('#sheet').querySelectorAll('.pbtn').forEach(b=>b.onclick=async()=>{const u=b.dataset.u,pagado=b.dataset.pago==='1';const d=$('#sheet').querySelector(`.pdate[data-u="${u}"]`);b.disabled=true;
+    try{await api.setPago({oferta_id:o.id,uid:u,pagado,fecha_pago:pagado?(d?.value||today()):null});toast(pagado?'Pago registrado':'Pago desmarcado');if(DEMO)detalle(ofertas.find(x=>x.id===o.id))}catch(e){b.disabled=false;errorGuardar(e)}});
   const ok=$('#p_ok');if(ok)ok.onclick=async()=>{
     const cant=Number($('#p_cant').value);if(!cant||cant<=0)return toast('Poné una cantidad');
     ok.disabled=true;
