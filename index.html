@@ -326,11 +326,13 @@ function detalle(o){
     ${o.notas?`<div class="desc">${esc(o.notas)}</div>`:''}
     <div class="list">${lista}</div>${form}
     <button class="btn wa" id="p_wa">Compartir en WhatsApp</button>
+    ${soy&&st!=='abierta'&&ped.length?'<button class="btn p" id="p_prov">Enviar pedido al proveedor</button>':''}
     ${soy&&st==='abierta'?'<button class="btn s" id="p_cerrar">Cerrar oferta</button>':''}
     ${soy&&st!=='abierta'?'<button class="btn d" id="p_borrar">Eliminar del historial</button>':''}`);
   $('#p_wa').onclick=()=>{const link=location.href.split('#')[0]+'#'+o.id;const txt=`🛒 *${o.producto}*\n${o.proveedor} · ${fmtP(o.precio)} por ${o.unidad||'unidad'}\nCierra el ${fmtD(o.cierra)}${o.minimo?' · mínimo '+o.minimo:''}${o.notas?'\n'+o.notas:''}\n\nSumate acá con tu cantidad: ${link}`;window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank')};
   $('#sheet').querySelectorAll('.pbtn').forEach(b=>b.onclick=async()=>{const u=b.dataset.u,pagado=b.dataset.pago==='1';const d=$('#sheet').querySelector(`.pdate[data-u="${u}"]`);b.disabled=true;
     try{await api.setPago({oferta_id:o.id,uid:u,pagado,fecha_pago:pagado?(d?.value||today()):null});toast(pagado?'Pago registrado':'Pago desmarcado');if(DEMO)detalle(ofertas.find(x=>x.id===o.id))}catch(e){b.disabled=false;errorGuardar(e)}});
+  const pv=$('#p_prov');if(pv)pv.onclick=()=>{const lines=ped.map(p=>`• ${nom(p.uid)==='Vos'?(perfiles[uid]?.nombre||'Yo'):nom(p.uid)}${neg(p.uid)?' ('+neg(p.uid)+')':''}: ${p.cantidad} ${o.unidad||'unidades'}${p.fecha?' · para el '+fmtD(p.fecha):''}`);const txt=`*Pedido: ${o.producto}*\nTotal: ${totalDe(o.id)} ${o.unidad||'unidades'} · ${ped.length} ${ped.length===1?'comprador':'compradores'}\n\n${lines.join('\n')}`;window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank')};
   const ok=$('#p_ok');if(ok)ok.onclick=async()=>{
     const cant=Number($('#p_cant').value);if(!cant||cant<=0)return toast('Poné una cantidad');
     ok.disabled=true;
