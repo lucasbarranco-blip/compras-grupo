@@ -182,6 +182,8 @@ const supaStore={
   async login(email,password){const {data,error}=await sb.auth.signInWithPassword({email,password});if(error)throw error;uid=data.user.id},
   async signup(email,password){const {data,error}=await sb.auth.signUp({email,password});if(error)throw error;if(!data.session)throw new Error('sin sesión');uid=data.user.id},
   async logout(){await sb.auth.signOut()},
+  async reset(email){const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.href.split('#')[0].split('?')[0]});if(error)throw error},
+  async setPassword(pw){const {error}=await sb.auth.updateUser({password:pw});if(error)throw error},
   async savePerfil(p){const {error}=await sb.from('perfiles').upsert(p);if(error)throw error;await this.load()},
   async addOferta(o){const {data,error}=await sb.from('ofertas').insert(o).select('id').single();if(error)throw error;this.notify('oferta',data.id);return data.id},
   async updOferta(id,patch){const {error}=await sb.from('ofertas').update(patch).eq('id',id);if(error)throw error;if(patch.estado)this.notify('cierre',id)},
@@ -279,7 +281,7 @@ function renderPerfil(){
     <div class="card" style="cursor:default"><div class="meta"><span>publicaste <b>${mis}</b> ofertas</span><span>te sumaste a <b>${part}</b></span></div></div>
     ${DEMO?'<div class="note" style="padding:0 4px">Estás viendo una demo con datos de ejemplo. Podés cambiar de usuario para ver cómo lo ve cada uno.</div>':''}
     <button class="btn s" id="pf_out">${DEMO?'Cambiar de usuario':'Cerrar sesión'}</button>`;
-  $('#pf_ok').onclick=async()=>{try{await api.savePerfil({id:uid,nombre:$('#pf_nom').value.trim(),negocio:$('#pf_neg').value.trim()});toast('Guardado')}catch(e){toast('No se pudo guardar')}};
+  $('#pf_ok').onclick=async()=>{const n=$('#pf_nom').value.trim(),g=$('#pf_neg').value.trim();if(!n||!g)return toast('Nombre y negocio son obligatorios');try{await api.savePerfil({id:uid,nombre:n,negocio:g});toast('Guardado')}catch(e){toast('No se pudo guardar')}};
   $('#pf_out').onclick=async()=>{await api.logout();uid=null;showLogin()};
 }
 
@@ -289,21 +291,22 @@ function closeSheet(){$('#sbg').classList.remove('open');$('#sheet').classList.r
 $('#sbg').onclick=closeSheet;
 const errorGuardar=e=>{console.error(e);toast(e?.message?.includes('row-level')?'No tenés permiso para eso':'No se pudo guardar. Probá de nuevo.')};
 
-function nuevaOferta(){
-  openSheet(`<h2>Nueva oferta</h2>
-  <label>Proveedor</label><input id="f_prov" placeholder="Ej: Distribuidora Norte">
-  <label>Producto</label><input id="f_prod" placeholder="Ej: Aceite Cocinero 900ml x12">
-  <div class="g2"><div><label>Precio</label><input id="f_precio" type="number" inputmode="decimal" placeholder="0"></div><div><label>Por</label><input id="f_unid" placeholder="bulto, caja, pack…"></div></div>
-  <div class="g2"><div><label>Cierra el</label><input id="f_cierra" type="date" value="${addDays(2)}"></div><div><label>Entrega estimada</label><input id="f_ent" type="date"></div></div>
-  <label>Mínimo para que salga (opcional)</label><input id="f_min" placeholder="Ej: 50 bultos">
-  <label>Condiciones / notas</label><textarea id="f_notas" placeholder="Forma de pago, retiro, vencimiento…"></textarea>
-  <button class="btn p" id="f_ok">Publicar oferta</button><button class="btn s" id="f_cancel">Cancelar</button>`);
+function nuevaOferta(ed){
+  const v=ed||{};
+  openSheet(`<h2>${ed?'Editar oferta':'Nueva oferta'}</h2>
+  <label>Proveedor</label><input id="f_prov" value="${esc(v.proveedor||'')}" placeholder="Ej: Distribuidora Norte">
+  <label>Producto</label><input id="f_prod" value="${esc(v.producto||'')}" placeholder="Ej: Aceite Cocinero 900ml x12">
+  <div class="g2"><div><label>Precio</label><input id="f_precio" type="number" inputmode="decimal" value="${v.precio??''}" placeholder="0"></div><div><label>Por</label><input id="f_unid" value="${esc(v.unidad||'')}" placeholder="bulto, caja, pack…"></div></div>
+  <div class="g2"><div><label>Cierra el</label><input id="f_cierra" type="date" value="${v.cierra||addDays(2)}"></div><div><label>Entrega estimada</label><input id="f_ent" type="date" value="${v.entrega||''}"></div></div>
+  <label>Mínimo para que salga (opcional)</label><input id="f_min" value="${esc(v.minimo||'')}" placeholder="Ej: 50 bultos">
+  <label>Condiciones / notas</label><textarea id="f_notas" placeholder="Forma de pago, retiro, vencimiento…">${esc(v.notas||'')}</textarea>
+  <button class="btn p" id="f_ok">${ed?'Guardar cambios':'Publicar oferta'}</button><button class="btn s" id="f_cancel">Cancelar</button>`);
   $('#f_cancel').onclick=closeSheet;
   $('#f_ok').onclick=async()=>{
     const o={proveedor:$('#f_prov').value.trim(),producto:$('#f_prod').value.trim(),precio:Number($('#f_precio').value),unidad:$('#f_unid').value.trim()||'unidad',cierra:$('#f_cierra').value,entrega:$('#f_ent').value||null,minimo:$('#f_min').value.trim()||null,notas:$('#f_notas').value.trim()||null,autor_id:uid,estado:'abierta'};
     if(!o.proveedor||!o.producto||!o.precio||!o.cierra)return toast('Completá proveedor, producto, precio y cierre');
     $('#f_ok').disabled=true;
-    try{const id=await api.addOferta(o);closeSheet();toast('Oferta publicada');setTimeout(()=>{const x=ofertas.find(y=>y.id===id);if(x)detalle(x)},250)}
+    try{let id;if(ed){delete o.autor_id;delete o.estado;await api.updOferta(ed.id,o);id=ed.id;toast('Oferta actualizada')}else{id=await api.addOferta(o);toast('Oferta publicada')}closeSheet();setTimeout(()=>{const x=ofertas.find(y=>y.id===id);if(x)detalle(x)},250)}
     catch(e){$('#f_ok').disabled=false;errorGuardar(e)}
   };
 }
@@ -327,7 +330,7 @@ function detalle(o){
     <div class="list">${lista}</div>${form}
     ${st==='abierta'?'<button class="btn wa" id="p_wa">Compartir en el grupo (WhatsApp)</button>':''}
     ${soy&&st!=='abierta'&&ped.length?'<button class="btn p" id="p_prov">Enviar pedido al proveedor</button>':''}
-    ${soy&&st==='abierta'?'<button class="btn s" id="p_cerrar">Cerrar oferta</button>':''}
+    ${soy&&st==='abierta'?'<button class="btn s" id="p_edit">Editar oferta</button><button class="btn s" id="p_cerrar">Cerrar oferta</button>':''}
     ${soy&&st!=='abierta'?'<button class="btn d" id="p_borrar">Eliminar del historial</button>':''}`);
   const wa=$('#p_wa');if(wa)wa.onclick=()=>{const link=location.href.split('#')[0]+'#'+o.id;const txt=`🛒 *${o.producto}*\n${o.proveedor} · ${fmtP(o.precio)} por ${o.unidad||'unidad'}\nCierra el ${fmtD(o.cierra)}${o.minimo?' · mínimo '+o.minimo:''}${o.notas?'\n'+o.notas:''}\n\nSumate acá con tu cantidad: ${link}`;window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank')};
   $('#sheet').querySelectorAll('.pbtn').forEach(b=>b.onclick=async()=>{const u=b.dataset.u,pagado=b.dataset.pago==='1';const d=$('#sheet').querySelector(`.pdate[data-u="${u}"]`);b.disabled=true;
@@ -344,6 +347,7 @@ function detalle(o){
     catch(e){ok.disabled=false;errorGuardar(e)}
   };
   const del=$('#p_del');if(del)del.onclick=async()=>{if(!confirm('¿Bajarte de esta oferta?'))return;try{await api.delPedido(o.id);toast('Te bajaste');closeSheet()}catch(e){errorGuardar(e)}};
+  const ed=$('#p_edit');if(ed)ed.onclick=()=>{sheetOf=null;nuevaOferta(o)};
   const c=$('#p_cerrar');if(c)c.onclick=async()=>{if(!confirm('¿Cerrar la oferta? Nadie más podrá sumarse.'))return;try{await api.updOferta(o.id,{estado:'cerrada',cerrada_en:new Date().toISOString()});toast('Oferta cerrada');closeSheet()}catch(e){errorGuardar(e)}};
   const b=$('#p_borrar');if(b)b.onclick=async()=>{if(!confirm('¿Eliminar la oferta y sus pedidos?'))return;try{await api.delOferta(o.id);toast('Eliminada');closeSheet()}catch(e){errorGuardar(e)}};
 }
@@ -362,16 +366,32 @@ function showLogin(){
     $('#login').innerHTML=`<h2>Compras en grupo</h2><p>Entrá con tu mail y una contraseña. Si es tu primera vez, tocá "Crear cuenta".</p>
       <label>Mail</label><input id="l_mail" type="email" inputmode="email" autocomplete="username" placeholder="tu@mail.com">
       <label>Contraseña</label><input id="l_pass" type="password" autocomplete="current-password" placeholder="mínimo 6 caracteres">
-      <button class="btn p" id="l_in">Entrar</button><button class="btn s" id="l_up">Crear cuenta</button>`;
+      <button class="btn p" id="l_in">Entrar</button><button class="btn s" id="l_up">Crear cuenta</button><button class="btn d" id="l_reset">Olvidé mi contraseña</button>`;
     const creds=()=>{const m=$('#l_mail').value.trim().toLowerCase(),p=$('#l_pass').value;if(!m||!p){toast('Completá mail y contraseña');return null}if(p.length<6){toast('La contraseña tiene que tener 6 caracteres o más');return null}return [m,p]};
-    $('#l_in').onclick=async()=>{const c=creds();if(!c)return;try{await api.login(...c);enter()}catch(e){toast(/invalid/i.test(e.message)?'Mail o contraseña incorrectos':'No se pudo entrar: '+e.message)}};
+    $('#l_in').onclick=async()=>{const c=creds();if(!c)return;try{await api.login(...c);enter()}catch(e){toast(/invalid/i.test(e.message)?'Mail o contraseña incorrectos. Si no la recordás, tocá "Olvidé mi contraseña"':'No se pudo entrar: '+e.message)}};
+    $('#l_reset').onclick=async()=>{const m=$('#l_mail').value.trim().toLowerCase();if(!m)return toast('Escribí tu mail arriba y volvé a tocar');$('#l_reset').disabled=true;try{await api.reset(m);toast('Te mandamos un mail con un link para crear una contraseña nueva')}catch(e){$('#l_reset').disabled=false;toast('No se pudo enviar: '+e.message)}};
     $('#l_up').onclick=async()=>{const c=creds();if(!c)return;try{await api.signup(...c);enter()}catch(e){toast(/already|registered/i.test(e.message)?'Ese mail ya tiene cuenta, tocá Entrar':'No se pudo crear: '+e.message)}};
   }
+}
+function showNuevaPass(){
+  $('#app').hidden=true;$('#login').hidden=false;
+  $('#login').innerHTML=`<h2>Nueva contraseña</h2><p>Elegí una contraseña nueva para entrar a la app.</p><label>Contraseña nueva</label><input id="np1" type="password" autocomplete="new-password" placeholder="mínimo 6 caracteres"><label>Repetila</label><input id="np2" type="password" autocomplete="new-password"><button class="btn p" id="np_ok">Guardar y entrar</button>`;
+  $('#np_ok').onclick=async()=>{const a=$('#np1').value,b=$('#np2').value;if(a.length<6)return toast('Mínimo 6 caracteres');if(a!==b)return toast('No coinciden');$('#np_ok').disabled=true;try{await api.setPassword(a);uid=await api.session();history.replaceState(null,'',location.pathname);toast('Contraseña actualizada');enter()}catch(e){$('#np_ok').disabled=false;toast('No se pudo guardar: '+e.message)}};
+}
+function showAlta(){
+  $('#app').hidden=true;$('#login').hidden=false;
+  const me=perfiles[uid]||{};
+  $('#login').innerHTML=`<h2>Antes de empezar</h2><p>Para operar en el grupo tenés que estar listado. Completá tu nombre y el de tu negocio: así todos saben quién es quién en cada oferta.</p>
+    <label>Tu nombre</label><input id="a_nom" value="${esc(me.nombre||'')}" placeholder="Ej: Marta" autocomplete="name">
+    <label>Tu negocio</label><input id="a_neg" value="${esc(me.negocio||'')}" placeholder="Ej: Autoservicio El Trébol">
+    <button class="btn p" id="a_ok">Listarme y entrar</button><button class="btn d" id="a_out">Salir</button>`;
+  $('#a_ok').onclick=async()=>{const n=$('#a_nom').value.trim(),g=$('#a_neg').value.trim();if(!n||!g)return toast('Completá los dos campos');$('#a_ok').disabled=true;try{await api.savePerfil({id:uid,nombre:n,negocio:g});$('#login').hidden=true;$('#app').hidden=false;view='ofertas';render();toast('Listo, ya estás en el grupo')}catch(e){$('#a_ok').disabled=false;toast('No se pudo guardar: '+e.message)}};
+  $('#a_out').onclick=async()=>{await api.logout();uid=null;showLogin()};
 }
 async function enter(){
   $('#login').hidden=true;$('#app').hidden=false;
   await api.start();
-  if(!perfiles[uid]?.nombre){view='perfil';render();toast('Completá tu nombre y negocio')}
+  const me=perfiles[uid];if(!me?.nombre?.trim()||!me?.negocio?.trim()){showAlta();return}
   const h=location.hash.slice(1);if(h){const o=ofertas.find(x=>x.id===h);if(o)detalle(o)}
 }
 
@@ -385,6 +405,7 @@ const _render=render;render=async function(){await _render();if(sheetOf&&!docume
 (async()=>{
   $('#demoBar').hidden=!DEMO;
   if(!DEMO){sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY)}else demoStore.seed();
+  if(!DEMO&&/type=recovery/.test(location.hash)){await new Promise(r=>setTimeout(r,1500));showNuevaPass();return}
   uid=await api.session();
   if(!uid&&!DEMO&&location.hash.includes('access_token')){await new Promise(r=>setTimeout(r,1500));uid=await api.session();history.replaceState(null,'',location.pathname)}
   if(uid)enter();else showLogin();
