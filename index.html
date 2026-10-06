@@ -324,7 +324,7 @@ $('#sbg').onclick=closeSheet;
 const errorGuardar=e=>{console.error(e);const m=e?.message||'';toast(m.includes('row-level')?'No tenés permiso para eso':(/JWT|expired|refresh|401/i.test(m)?'Se venció la sesión: cerrá sesión en Perfil y volvé a entrar':'No se pudo guardar: '+(m||'error desconocido').slice(0,140)))};
 
 function nuevaOferta(ed){
-  const v=ed||{};
+  if(!ed||!ed.id)ed=null;const v=ed||{};
   openSheet(`<h2>${ed?'Editar oferta':'Nueva oferta'}</h2>
   <label>Proveedor</label><input id="f_prov" value="${esc(v.proveedor||'')}" placeholder="Ej: Distribuidora Norte">
   <label>Producto</label><input id="f_prod" value="${esc(v.producto||'')}" placeholder="Ej: Aceite Cocinero 900ml x12">
@@ -436,7 +436,7 @@ async function enter(){
 
 // ================== UI ==================
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{view=b.dataset.v;render()});
-$('#fab').onclick=nuevaOferta;
+$('#fab').onclick=()=>nuevaOferta(null);
 main.addEventListener('click',e=>{const c=e.target.closest('[data-id]');if(!c)return;const o=ofertas.find(x=>x.id===c.dataset.id);if(o)detalle(o)});
 // refrescar el detalle abierto cuando llegan cambios, sin pisar lo que se está escribiendo
 const _render=render;render=async function(){await _render();if(sheetOf&&!document.activeElement?.closest('#sheet')){const o=ofertas.find(x=>x.id===sheetOf);if(o)detalle(o)}};
