@@ -321,7 +321,7 @@ function renderPerfil(){
 function openSheet(html){$('#sheet').innerHTML='<div class="grab"></div>'+html;$('#sbg').classList.add('open');$('#sheet').classList.add('open')}
 function closeSheet(){$('#sbg').classList.remove('open');$('#sheet').classList.remove('open');sheetOf=null}
 $('#sbg').onclick=closeSheet;
-const errorGuardar=e=>{console.error(e);toast(e?.message?.includes('row-level')?'No tenés permiso para eso':'No se pudo guardar. Probá de nuevo.')};
+const errorGuardar=e=>{console.error(e);const m=e?.message||'';toast(m.includes('row-level')?'No tenés permiso para eso':(/JWT|expired|refresh|401/i.test(m)?'Se venció la sesión: cerrá sesión en Perfil y volvé a entrar':'No se pudo guardar: '+(m||'error desconocido').slice(0,140)))};
 
 function nuevaOferta(ed){
   const v=ed||{};
