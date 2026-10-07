@@ -243,7 +243,7 @@ function cardHTML(o){
     <div class="tag">${fmtP(o.precio)}<small>por ${esc(o.unidad||'unidad')}${o.unidades_bulto?` · ${o.unidades_bulto} u.`:''}</small>${o.unidades_bulto?`<small>${fmtP(o.precio/o.unidades_bulto)} c/u</small>`:''}</div>
     ${o.variantes?`<div class="meta" style="margin-top:6px">${o.variantes.map(v=>`<span class="vchip">${esc(v.n)}${v.p?' '+fmtP(v.p)+(o.unidades_bulto?' ('+fmtP(v.p/o.unidades_bulto)+' c/u)':''):''} · <b>${varTotales(o)[v.n]||0}</b></span>`).join('')}</div>`:''}
     <div class="meta"><span>${cierra}</span>${o.minimo?`<span>mínimo <b>${esc(o.minimo)}</b></span>`:''}${o.entrega?`<span>entrega <b>${fmtD(o.entrega)}</b></span>`:''}</div>
-    <div class="row"><span><b>${totalDe(o.id)}</b> ${esc(o.unidad||'unidades')} · ${ped.length} ${ped.length===1?'comprador':'compradores'}${ped.length?` · ${ped.filter(p=>pagoDe(o.id,p.uid)?.pagado).length}/${ped.length} pagaron`:''}</span>
+    <div class="row"><span><b>${totalDe(o.id)}</b> ${esc(o.unidad||'unidades')} · ${ped.length} ${ped.length===1?'comprador':'compradores'}${ped.length?` · ${ped.filter(p=>pagoDe(o.id,p.uid)?.pagado).length}/${ped.length} pagaron`:''}${ped.length?`<br><span style="color:var(--ink2)">Compra total: <b>${fmtP(importeTotal(o))}</b></span>`:''}</span>
       ${mp?`<span class="mine">Vos: ${esc(mp.cantidad)} · ${fmtP(importeDe(o,mp))}</span>`:`<span class="avs">${avs}</span>`}</div></div>`;
 }
 function aplicaFilt(list){
@@ -363,7 +363,7 @@ function detalle(o){
     ${soy&&ped.length?'<div class="note">Como publicaste esta oferta, podés marcar quién pagó y cuándo. Los demás solo lo ven.</div>':''}
     ${o.variantes?`<div class="meta" style="margin-top:8px">${o.variantes.map(v=>`<span class="vchip">${esc(v.n)}${v.p?' '+fmtP(v.p):''} · <b>${varTotales(o)[v.n]||0}</b></span>`).join('')}</div>`:''}
     ${o.notas?`<div class="desc">${esc(o.notas)}</div>`:''}
-    <div class="list">${lista}</div>${form}
+    <div class="list">${lista}${ped.length?`<div class="li" style="border-bottom:0"><div class="n"><b style="font-family:Barlow;font-size:15px">Total de la compra</b><small>${ped.length} ${ped.length===1?'integrante':'integrantes'} · ${totalDe(o.id)} ${esc(o.unidad||'unidades')}</small></div><b style="font-size:24px">${fmtP(importeTotal(o))}</b></div>`:''}</div>${form}
     ${st==='abierta'?'<button class="btn wa" id="p_wa">Compartir en el grupo (WhatsApp)</button>':''}
     ${soy&&st!=='abierta'&&ped.length?'<button class="btn p" id="p_prov">Enviar pedido al proveedor</button><button class="btn wa" id="p_cobro">Enviar resumen de cobro al grupo</button>':''}
     ${soy&&st==='abierta'?'<button class="btn s" id="p_edit">Editar oferta</button><button class="btn s" id="p_cerrar">Cerrar oferta</button>':''}
