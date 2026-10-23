@@ -145,6 +145,7 @@ const porUnidad=(precio,ub)=>(precio&&ub>0)?fmtP(precio/ub)+' por unidad':'';
 const importeDe=(o,p)=>{if(o.variantes&&p.detalle){return Object.entries(p.detalle).reduce((a,[k,q])=>{const v=o.variantes.find(x=>x.n===k);return a+Number(q||0)*Number((v&&v.p)||o.precio||0)},0)}return Number(p.cantidad||0)*Number(o.precio||0)};
 const importeTotal=o=>pedidosDe(o.id).reduce((a,p)=>a+importeDe(o,p),0);
 const totalDe=id=>pedidosDe(id).reduce((a,p)=>a+Number(p.cantidad||0),0);
+const esAdmin=()=>!!perfiles[uid]?.admin;
 const nom=id=>id===uid?'Vos':(perfiles[id]?.nombre||'Alguien');
 const neg=id=>perfiles[id]?.negocio||'';
 const avatar=id=>{const p=perfiles[id]||{},n=(p.nombre||'?').trim(),ini=n.split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();let h=0;for(const c of String(id))h=(h*31+c.charCodeAt(0))%360;return 'data:image/svg+xml,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><circle cx="20" cy="20" r="20" fill="hsl(${h},45%,45%)"/><text x="20" y="26" text-anchor="middle" font-family="sans-serif" font-size="16" font-weight="600" fill="#fff">${ini}</text></svg>`)};
@@ -304,7 +305,7 @@ function renderGrupo(){
   const list=Object.values(perfiles).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
   const stats=id=>({pub:ofertas.filter(o=>o.autor_id===id).length,part:pedidos.filter(p=>p.uid===id).length});
   main.innerHTML=`<div class="tot"><div><b>${list.length}</b> <span>${list.length===1?'miembro':'miembros'}</span></div><div style="text-align:right"><b>${ofertas.length}</b> <span>ofertas en total</span></div></div>
-    <div class="list" style="margin-top:14px">${list.map(p=>{const st=stats(p.id);return `<div class="li"><img src="${avatar(p.id)}" alt=""><div class="n">${esc(p.nombre||'Sin nombre')}${p.id===uid?' <span class="mine">vos</span>':''}<small>${esc(p.negocio||'')}${p.creado_en?' · desde '+fmtD(p.creado_en):''}</small></div><div style="text-align:right;font-size:13px;color:var(--ink2)"><b style="color:var(--ink)">${st.pub}</b> publicó<br><b style="color:var(--ink)">${st.part}</b> se sumó</div></div>`}).join('')||'<div class="note">Todavía no hay nadie registrado.</div>'}</div>`;
+    <div class="list" style="margin-top:14px">${list.map(p=>{const st=stats(p.id);return `<div class="li"><img src="${avatar(p.id)}" alt=""><div class="n">${esc(p.nombre||'Sin nombre')}${p.admin?' <span class="mine">admin</span>':''}${p.id===uid?' <span class="mine">vos</span>':''}<small>${esc(p.negocio||'')}${p.creado_en?' · desde '+fmtD(p.creado_en):''}</small></div><div style="text-align:right;font-size:13px;color:var(--ink2)"><b style="color:var(--ink)">${st.pub}</b> publicó<br><b style="color:var(--ink)">${st.part}</b> se sumó</div></div>`}).join('')||'<div class="note">Todavía no hay nadie registrado.</div>'}</div>`;
 }
 function renderPerfil(){
   $('#title').textContent='Perfil';$('#sub').textContent='Tus datos en el grupo';
@@ -350,7 +351,7 @@ function nuevaOferta(ed){
 }
 function detalle(o){
   sheetOf=o.id;
-  const st=estado(o),mp=miPedido(o.id),ped=pedidosDe(o.id),soy=o.autor_id===uid;
+  const st=estado(o),mp=miPedido(o.id),ped=pedidosDe(o.id),soy=o.autor_id===uid||esAdmin();
   const lista=ped.length?ped.map(p=>{const pg=pagoDe(o.id,p.uid),ok=!!pg?.pagado;const badge=ok?`<span class="pay ok">Pagó ${pg.fecha_pago?fmtD(pg.fecha_pago):''}</span>`:`<span class="pay">Pendiente</span>`;
     const ctl=soy?(ok?`<button class="pbtn" data-pago="0" data-u="${p.uid}">Desmarcar</button>`:`<input type="date" class="pdate" data-u="${p.uid}" value="${today()}"><button class="pbtn p" data-pago="1" data-u="${p.uid}">Marcar pagado</button>`):'';
     return `<div class="li" style="flex-wrap:wrap"><img src="${avatar(p.uid)}" alt=""><div class="n">${esc(nom(p.uid))}${neg(p.uid)?' · '+esc(neg(p.uid)):''}<small>${detalleTxt(p)?esc(detalleTxt(p))+'<br>':''}${p.fecha?'para el '+fmtD(p.fecha):''}${p.nota?(p.fecha?' · ':'')+esc(p.nota):''}</small></div><div style="text-align:right"><b>${esc(p.cantidad)}</b> <span style="font-size:13px;color:var(--ink2)">${fmtP(importeDe(o,p))}</span><br>${badge}</div>${ctl?`<div class="pctl">${ctl}</div>`:''}</div>`}).join(''):'<div class="note">Nadie se sumó todavía.</div>';
@@ -363,7 +364,7 @@ function detalle(o){
   openSheet(`<h2>${esc(o.producto)}</h2><div class="prov">${esc(o.proveedor)} · publicó ${esc(nom(o.autor_id))} hace ${rel(o.creada_en)}</div>
     <div class="tot"><div><b>${fmtP(o.precio)}</b> <span>por ${esc(o.unidad||'unidad')}</span>${o.unidades_bulto?`<br><span>${o.unidades_bulto} unidades · ${fmtP(o.precio/o.unidades_bulto)} c/u</span>`:''}</div><div style="text-align:right"><b>${totalDe(o.id)}</b> <span>sumados</span>${ped.length?`<br><span>${fmtP(importeTotal(o))} en total</span>`:''}</div></div>
     <div class="meta"><span>cierra <b>${fmtD(o.cierra)}</b></span>${o.entrega?`<span>entrega <b>${fmtD(o.entrega)}</b></span>`:''}${o.minimo?`<span>mínimo <b>${esc(o.minimo)}</b></span>`:''}<span>estado <b>${st}</b></span>${ped.length?`<span>pagaron <b>${pagados}/${ped.length}</b></span>`:''}</div>
-    ${soy&&ped.length?'<div class="note">Como publicaste esta oferta, podés marcar quién pagó y cuándo. Los demás solo lo ven.</div>':''}
+    ${soy&&ped.length?'<div class="note">'+(o.autor_id===uid?'Como publicaste esta oferta':'Como administrador')+', podés marcar quién pagó y cuándo. Los demás solo lo ven.</div>':''}
     ${o.variantes?`<div class="meta" style="margin-top:8px">${o.variantes.map(v=>`<span class="vchip">${esc(v.n)}${v.p?' '+fmtP(v.p):''} · <b>${varTotales(o)[v.n]||0}</b></span>`).join('')}</div>`:''}
     ${o.notas?`<div class="desc">${esc(o.notas)}</div>`:''}
     <div class="list">${lista}${ped.length?`<div class="li" style="border-bottom:0"><div class="n"><b style="font-family:Barlow;font-size:15px">Total de la compra</b><small>${ped.length} ${ped.length===1?'integrante':'integrantes'} · ${totalDe(o.id)} ${esc(o.unidad||'unidades')}</small></div><b style="font-size:24px">${fmtP(importeTotal(o))}</b></div>`:''}</div>${form}
